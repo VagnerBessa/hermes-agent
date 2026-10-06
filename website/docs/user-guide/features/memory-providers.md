@@ -475,7 +475,9 @@ hermes config set memory.provider hindsight
 echo "HINDSIGHT_API_KEY=your-key" >> ~/.hermes/.env
 ```
 
-The plugin lands in `~/.hermes/plugins/hindsight/` (per profile home) and is enabled under `plugins.enabled` in `config.yaml`. `hermes memory setup`, `hermes memory status`, `hermes plugins list` and the dashboard Memory settings all work with the catalog-installed plugin. In local embedded mode the plugin installs `hindsight-all` on first use through Hermes' lazy-install path, which honours `security.allow_lazy_installs`.
+The plugin lands in `~/.hermes/plugins/hindsight/` (per profile home) and is enabled under `plugins.enabled` in `config.yaml`. `hermes memory setup`, `hermes memory status`, `hermes plugins list` and the dashboard Memory settings all work with the catalog-installed plugin. In local embedded mode the plugin starts the Hindsight server as a separate daemon (an installed `hindsight-api`, else `uvx hindsight-api`); its client packages come with the plugin.
+
+**Several profiles:** see [Hindsight memory across profiles](../../guides/hindsight-memory-profiles.md) for the layout that keeps profiles from stalling each other, with load-test numbers, and `scripts/hindsight_memory_setup.py` to apply it.
 
 **Local mode UI:** `hindsight-embed -p hermes ui start`
 

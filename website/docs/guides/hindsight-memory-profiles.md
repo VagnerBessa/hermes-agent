@@ -24,6 +24,9 @@ script that applies it, and the measurements behind it.
   differ from it (`_profile_env_drifted` in the plugin). Each restart took ~20 s in the tests
   below, and every call from every profile failed during it. `local_external` avoids this
   entirely because the server owns its LLM settings.
+- **`recall_sync: true`.** By default the plugin injects only the recall it ran in the background
+  after the previous turn, so the first message of every session gets no memory. Sync recall
+  answers the current message instead; the cost is in the table below.
 - **`prefetch_waits_for_retain: false`.** By default the background recall for the next turn
   first waits for the previous turn's retain to finish. The previous turn is already in the
   conversation, and the wait is what pushed recall into the plugin's 3 s per-turn cap.
@@ -85,9 +88,11 @@ python scripts/hindsight_memory_setup.py --all-profiles --dry-run
 python scripts/hindsight_memory_setup.py --embedded
 ```
 
-The script installs the catalog plugin where missing (`hermes -p <profile> plugins install
-hindsight --enable`), writes `<profile home>/hindsight/config.json`, and sets
-`memory.provider: hindsight`. Start a new session afterwards; `hermes -p <profile> memory status`
+The script installs the catalog plugin (`hermes -p <profile> plugins install hindsight --enable
+--yes-deps`, plus `--force` when a copy already exists). Without `--yes-deps` a run with no
+terminal skips the plugin's Python dependencies and leaves it disabled ("dependency install
+skipped (non-interactive)"); `--force` repairs a copy such a run left behind. It then writes
+`<profile home>/hindsight/config.json` and sets `memory.provider: hindsight`. Start a new session afterwards; `hermes -p <profile> memory status`
 confirms. The built-in `MEMORY.md`/`USER.md` stay on unless you pass `--builtin-off`; while on,
 their writes are mirrored into Hindsight.
 
@@ -106,6 +111,22 @@ answers in 2 s, 10 turns per profile, every profile started at the same moment. 
 | Hindsight, 20 profiles at once | 5.02 s | 11.8 s | 3.1 s (cap) | 198 MB |
 | Hindsight server down, 10 profiles | 2.07 s | 8.7 s | 2.8 s | 199 MB |
 | Hindsight server wedged (accepts, never answers), 10 profiles | 5.02 s | 6.1 s | 3.0 s (cap) | 199 MB |
+
+The rows above use the background recall (`recall_sync: false`). The setup script turns
+`recall_sync` on, measured the same way against an LLM-less server
+(`HINDSIGHT_API_LLM_PROVIDER=none`, `recall_types: observation,world,experience`):
+
+| Scenario | Turn p50 | Turn p95 (worst profile) | Memory wait in a turn: p50 / longest | Close |
+|---|---|---|---|---|
+| Background recall, principal only | 2.09 s | 5.0 s | — / 0.17 s | 0.07 s |
+| Background recall, 10 profiles at once | 2.11 s | 6.5 s | — / 1.3 s | 0.10 s |
+| `recall_sync`, principal only | 2.10 s | 4.4 s | — / 1.1 s | 0.02 s |
+| `recall_sync`, 10 profiles at once | 2.10 s | 10.8 s | 75 ms / 3.9 s | 0.01 s |
+| `recall_sync`, server wedged, 10 profiles | 2.02 s | 14.1 s | — / 8.0 s (cap) | 10.0 s |
+
+With `recall_sync` the wait is the recall itself, no longer capped at 3 s by the plugin: usually
+under 0.1 s, a few seconds when many profiles recall at the same instant, and at most 8 s
+(core's cap on any external prefetch) when the server hangs. Still no turn hung or failed.
 
 No turn hung and no turn failed. The plugin waits at most 3 s per turn for recall
 (`prefetch()` joins its background recall with a 3 s cap) and core bounds every external

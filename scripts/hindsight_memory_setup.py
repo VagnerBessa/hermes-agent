@@ -72,6 +72,10 @@ def build_provider_config(existing: dict, *, shared_bank: bool, api_url: str | N
             "auto_recall": config.get("auto_recall", True),
             "auto_retain": config.get("auto_retain", True),
             "retain_async": config.get("retain_async", True),
+            # Without it the plugin only injects the recall it ran in the background after the
+            # PREVIOUS turn, so the first message of every session gets no memory at all. Sync
+            # recall answers the current message; core still bounds it at 8 s per turn.
+            "recall_sync": config.get("recall_sync", True),
             # The previous turn is already in the conversation; waiting for its retain before the
             # next recall cost each turn up to the plugin's 3 s prefetch cap in our measurements.
             "prefetch_waits_for_retain": config.get("prefetch_waits_for_retain", False),
@@ -150,8 +154,13 @@ def hermes(profile: str, *args: str, dry_run: bool) -> None:
 def setup_profile(name: str, *, key: str | None, args: argparse.Namespace) -> None:
     home = profile_home(name)
     print(f"\n[{name}] {home}")
-    if not (home / "plugins" / "hindsight").is_dir():
-        hermes(name, "plugins", "install", "hindsight", "--enable", dry_run=args.dry_run)
+    # --yes-deps: without a TTY the install otherwise skips the plugin's Python deps and leaves it
+    # disabled ("dependency install skipped (non-interactive)"). --force repairs a copy such a
+    # run left behind instead of refusing because the plugin already exists.
+    install = ["plugins", "install", "hindsight", "--enable", "--yes-deps"]
+    if (home / "plugins" / "hindsight").is_dir():
+        install.append("--force")
+    hermes(name, *install, dry_run=args.dry_run)
     existing_path = home / "hindsight" / "config.json"
     existing = json.loads(existing_path.read_text(encoding="utf-8")) if existing_path.is_file() else {}
     llm = {**DEFAULT_LLM, **{k: v for k, v in (("llm_base_url", args.llm_base_url), ("llm_model", args.llm_model)) if v}}

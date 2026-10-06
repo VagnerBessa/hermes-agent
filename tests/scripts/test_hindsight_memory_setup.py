@@ -41,6 +41,7 @@ def test_profiles_share_one_server_but_keep_their_own_bank(setup_mod, homes):
     assert a["mode"] == b["mode"] == "local_external"
     assert a["api_url"] == b["api_url"] == "http://127.0.0.1:9999"
     assert "world" in a["recall_types"]  # an LLM-less server has no observations to recall
+    assert a["recall_sync"] is True  # else the first message of a session gets no memory
     assert a["bank_id_template"] == b["bank_id_template"] and "{profile}" in a["bank_id_template"]
     assert "HINDSIGHT_LLM_API_KEY" not in setup_mod.read_env(homes["bento"] / ".env")
     set_provider = [c for c in setup_mod.calls if c[1:] == ("config", "set", "memory.provider", "hindsight")]
@@ -77,3 +78,17 @@ def test_embedded_without_llm_key_refuses(setup_mod, homes):
     (homes["default"] / ".env").write_text("OTHER=1\n", encoding="utf-8")
     assert setup_mod.main(["--embedded"]) == 2
     assert not (homes["default"] / "hindsight").exists()
+
+
+def test_install_consents_to_deps_and_repairs_a_disabled_copy(setup_mod, homes):
+    (homes["bento"] / "plugins" / "hindsight").mkdir(parents=True)  # left by a skipped-deps install
+    assert setup_mod.main(["--profiles", "default,bento"]) == 0
+    installs = {c[0]: c[1:] for c in setup_mod.calls if c[1:3] == ("plugins", "install")}
+    assert installs["default"] == ("plugins", "install", "hindsight", "--enable", "--yes-deps")
+    assert installs["bento"] == ("plugins", "install", "hindsight", "--enable", "--yes-deps", "--force")
+
+
+def test_existing_recall_sync_choice_is_kept(setup_mod, homes):
+    setup_mod.write_provider_config(homes["default"], {"recall_sync": False})
+    assert setup_mod.main([]) == 0
+    assert _cfg(homes["default"])["recall_sync"] is False

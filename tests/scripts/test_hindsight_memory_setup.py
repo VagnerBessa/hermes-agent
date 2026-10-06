@@ -40,6 +40,7 @@ def test_profiles_share_one_server_but_keep_their_own_bank(setup_mod, homes):
     a, b = _cfg(homes["default"]), _cfg(homes["bento"])
     assert a["mode"] == b["mode"] == "local_external"
     assert a["api_url"] == b["api_url"] == "http://127.0.0.1:9999"
+    assert "world" in a["recall_types"]  # an LLM-less server has no observations to recall
     assert a["bank_id_template"] == b["bank_id_template"] and "{profile}" in a["bank_id_template"]
     assert "HINDSIGHT_LLM_API_KEY" not in setup_mod.read_env(homes["bento"] / ".env")
     set_provider = [c for c in setup_mod.calls if c[1:] == ("config", "set", "memory.provider", "hindsight")]

@@ -28,6 +28,49 @@ script that applies it, and the measurements behind it.
   first waits for the previous turn's retain to finish. The previous turn is already in the
   conversation, and the wait is what pushed recall into the plugin's 3 s per-turn cap.
 
+## Run the server (Linux, systemd user service)
+
+Install and flags follow the Hindsight docs (`hindsight-docs/docs/developer/installation.md` and
+`configuration.mdx`). `hindsight-api` is the full package with local embedding models;
+`hindsight-api-slim` leaves them out.
+
+```bash
+uv venv ~/hindsight/venv --python 3.12
+~/hindsight/venv/bin/pip install hindsight-api
+
+cat > ~/hindsight/hindsight.env <<'EOF'
+HINDSIGHT_API_LLM_PROVIDER=none
+HINDSIGHT_API_RETAIN_EXTRACTION_MODE=chunks
+HINDSIGHT_API_EMBEDDINGS_LOCAL_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+HINDSIGHT_API_RERANKER_PROVIDER=local
+# Default storage is the embedded pg0 in ~/.hindsight/data; for production point it at PostgreSQL:
+# HINDSIGHT_API_DATABASE_URL=postgresql://user:pass@localhost:5432/hindsight
+EOF
+
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/hindsight.service <<'EOF'
+[Unit]
+Description=Hindsight memory server (shared by every Hermes profile)
+
+[Service]
+EnvironmentFile=%h/hindsight/hindsight.env
+ExecStart=%h/hindsight/venv/bin/hindsight-api --host 127.0.0.1 --port 8890
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now hindsight
+curl -s http://127.0.0.1:8890/health
+```
+
+The first start downloads the embedding and reranker models. With `LLM_PROVIDER=none` the server
+stores chunks as `world` facts and builds no observations, so the setup script below sets
+`recall_types: observation,world,experience` (the plugin's default, observations only, would
+recall nothing). Keep `HINDSIGHT_API_WORKERS` at 1 with pg0.
+
 ## Apply it
 
 ```bash

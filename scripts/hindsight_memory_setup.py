@@ -60,6 +60,9 @@ def build_provider_config(existing: dict, *, shared_bank: bool, api_url: str | N
     config = dict(existing)
     if api_url:
         config.update({"mode": "local_external", "api_url": api_url})
+        # A server run with HINDSIGHT_API_LLM_PROVIDER=none stores chunks as ``world`` facts and builds
+        # no observations, so the plugin's default (observations only) would always recall nothing.
+        config.setdefault("recall_types", "observation,world,experience")
     else:
         config.update({**(llm or {}), "mode": "local_embedded", "profile": SHARED_DAEMON_PROFILE})
     config.update(
